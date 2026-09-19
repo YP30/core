@@ -50,6 +50,8 @@ class IrmKmiCoordinator(TimestampDataUpdateCoordinator[ProcessedCoordinatorData]
         self._location = entry.data[CONF_LOCATION]
         # last_update_success_time is also renewed while serving old data
         self._last_api_success: datetime | None = None
+        self._last_pollen_success: datetime | None = None
+        self._pollen_failing = False
 
     def _within_grace(self, last_success: datetime | None) -> bool:
         """Return whether data from the last success may still be served."""
@@ -89,9 +91,28 @@ class IrmKmiCoordinator(TimestampDataUpdateCoordinator[ProcessedCoordinatorData]
         tz = await dt_util.async_get_time_zone("Europe/Brussels")
         lang = preferred_language(self.hass, self.config_entry)
 
+        try:
+            pollen = await self._api.get_pollen()
+        except IrmKmiApiError as err:
+            if not self._pollen_failing:
+                _LOGGER.warning("Could not get pollen data from the API: %s", err)
+                self._pollen_failing = True
+            pollen = (
+                self.data.pollen
+                if self.data is not None
+                and self._within_grace(self._last_pollen_success)
+                else None
+            )
+        else:
+            if self._pollen_failing:
+                _LOGGER.info("Pollen data is available again")
+                self._pollen_failing = False
+            self._last_pollen_success = dt_util.utcnow()
+
         return ProcessedCoordinatorData(
             current_weather=self._api.get_current_weather(tz),
             daily_forecast=self._api.get_daily_forecast(tz, lang),
             hourly_forecast=self._api.get_hourly_forecast(tz),
             country=self._api.get_country(),
+            pollen=pollen,
         )
