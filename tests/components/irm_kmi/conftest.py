@@ -13,9 +13,11 @@ from homeassistant.const import (
     CONF_UNIQUE_ID,
 )
 
-from .const import CURRENT_WEATHER
+from .const import ANIMATION, CURRENT_WEATHER
 
 from tests.common import MockConfigEntry, load_json_object_fixture
+
+RADAR_FRAME = b"\x89PNG\r\n\x1a\n" + bytes(1024)
 
 
 @pytest.fixture
@@ -60,7 +62,18 @@ def mock_irm_kmi_api() -> Generator[MagicMock]:
         irm_kmi.get_current_weather.return_value = CURRENT_WEATHER
         irm_kmi.get_daily_forecast.return_value = []
         irm_kmi.get_hourly_forecast.return_value = []
+        irm_kmi.get_animation_data.return_value = ANIMATION
         yield irm_kmi
+
+
+@pytest.fixture
+def mock_get_image() -> Generator[AsyncMock]:
+    """Mock get_image() to return a radar frame."""
+    with patch(
+        "homeassistant.components.irm_kmi.IrmKmiApiClientHa.get_image",
+        return_value=RADAR_FRAME,
+    ) as get_image:
+        yield get_image
 
 
 @pytest.fixture

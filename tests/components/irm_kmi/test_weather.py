@@ -1,7 +1,8 @@
 """Tests for the IRM KMI weather platform."""
 
+from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from irm_kmi_api import ExtendedForecast
 import pytest
@@ -12,7 +13,7 @@ from homeassistant.components.weather import (
     DOMAIN as WEATHER_DOMAIN,
     SERVICE_GET_FORECASTS,
 )
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.entity_registry as er
 
@@ -20,6 +21,13 @@ from . import setup_integration
 from .const import WEATHER_ENTITY_ID
 
 from tests.common import MockConfigEntry, snapshot_platform
+
+
+@pytest.fixture(autouse=True)
+def override_platforms() -> Generator[None]:
+    """Load only the weather platform."""
+    with patch("homeassistant.components.irm_kmi.PLATFORMS", [Platform.WEATHER]):
+        yield
 
 
 async def _get_forecast(
