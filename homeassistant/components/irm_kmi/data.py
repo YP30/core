@@ -2,7 +2,13 @@
 
 from dataclasses import dataclass, field
 
-from irm_kmi_api import CurrentWeatherData, ExtendedForecast, PollenLevel, PollenName
+from irm_kmi_api import (
+    CurrentWeatherData,
+    ExtendedForecast,
+    PollenLevel,
+    PollenName,
+    WarningData,
+)
 
 from homeassistant.components.weather import Forecast
 
@@ -14,5 +20,6 @@ class ProcessedCoordinatorData:
     current_weather: CurrentWeatherData
     country: str
     pollen: dict[PollenName, PollenLevel | None] | None
+    warnings: list[WarningData]
     hourly_forecast: list[Forecast] = field(default_factory=list)
     daily_forecast: list[ExtendedForecast] = field(default_factory=list)

@@ -115,4 +115,5 @@ class IrmKmiCoordinator(TimestampDataUpdateCoordinator[ProcessedCoordinatorData]
             hourly_forecast=self._api.get_hourly_forecast(tz),
             country=self._api.get_country(),
             pollen=pollen,
+            warnings=self._api.get_warnings(lang),
         )
