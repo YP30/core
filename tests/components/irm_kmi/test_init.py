@@ -96,6 +96,7 @@ async def test_config_entry_not_ready(
 
     assert mock_irm_kmi_api.refresh_forecasts_coord.call_count == 1
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_config_entry.error_reason_translation_key == "api_error"
 
 
 @pytest.mark.freeze_time("2023-12-28T15:30:00+01:00")
