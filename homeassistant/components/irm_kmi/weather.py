@@ -16,11 +16,14 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceResponse
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import IrmKmiConfigEntry, IrmKmiCoordinator
 from .entity import IrmKmiBaseEntity
+from .utils import current_radar_frame
 
 # Coordinator is used to centralize the data updates
 PARALLEL_UPDATES = 0
@@ -165,3 +168,16 @@ class IrmKmiWeather(
             ]
 
         return [f for f in data if f.get("is_daytime")]
+
+    async def async_get_forecasts_radar(
+        self, include_past_forecasts: bool = False
+    ) -> ServiceResponse:
+        """Return the rain radar forecast, which only carries precipitation."""
+        if not (radar_forecast := self.coordinator.data.radar_forecast):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_radar_forecast",
+            )
+
+        start = 0 if include_past_forecasts else current_radar_frame(radar_forecast)
+        return {"forecast": radar_forecast[start:]}

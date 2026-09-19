@@ -4,17 +4,22 @@ from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from irm_kmi_api import ExtendedForecast
+from irm_kmi_api import ExtendedForecast, RadarForecast
 import pytest
 from syrupy.assertion import SnapshotAssertion
 
-from homeassistant.components.irm_kmi.const import CONF_LANGUAGE_OVERRIDE
+from homeassistant.components.irm_kmi.const import (
+    CONF_LANGUAGE_OVERRIDE,
+    DOMAIN,
+    SERVICE_GET_FORECASTS_RADAR,
+)
 from homeassistant.components.weather import (
     DOMAIN as WEATHER_DOMAIN,
     SERVICE_GET_FORECASTS,
 )
 from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 import homeassistant.helpers.entity_registry as er
 
 from . import setup_integration
@@ -189,3 +194,112 @@ async def test_daily_forecast_starting_at_night(
         (forecast.get("temperature"), forecast.get("templow"))
         for forecast in await _get_forecast(hass, "daily")
     ] == expected
+
+
+@pytest.mark.usefixtures("mock_get_forecasts_coord")
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({}, id="default"),
+        pytest.param({"include_past_forecasts": False}, id="exclude_past"),
+        pytest.param({"include_past_forecasts": True}, id="include_past"),
+    ],
+)
+@pytest.mark.freeze_time("2023-12-26T18:05:00+01:00")
+async def test_get_forecasts_radar(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    snapshot: SnapshotAssertion,
+    fields: dict[str, bool],
+) -> None:
+    """Test the radar forecast action."""
+    await setup_integration(hass, mock_config_entry)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_GET_FORECASTS_RADAR,
+        {ATTR_ENTITY_ID: WEATHER_ENTITY_ID} | fields,
+        blocking=True,
+        return_response=True,
+    )
+    assert response == snapshot
+
+
+@pytest.mark.freeze_time("2023-12-26T18:05:00+01:00")
+async def test_get_forecasts_radar_without_radar_data(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_irm_kmi_api: MagicMock,
+) -> None:
+    """Test the action raises when the radar has no usable frame."""
+    mock_irm_kmi_api.get_radar_forecast.return_value = [
+        RadarForecast(
+            datetime="2023-12-26T18:10:00+01:00",
+            native_precipitation=0.1,
+            rain_forecast_max=0.2,
+            rain_forecast_min=0.0,
+            might_rain=True,
+            unit="mm/5min",
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(
+        HomeAssistantError,
+        match="^The rain radar reported no forecast for this location$",
+    ) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_FORECASTS_RADAR,
+            {ATTR_ENTITY_ID: WEATHER_ENTITY_ID},
+            blocking=True,
+            return_response=True,
+        )
+    assert err.value.translation_domain == DOMAIN
+    assert err.value.translation_key == "no_radar_forecast"
+
+
+@pytest.mark.usefixtures("mock_get_forecasts_coord")
+@pytest.mark.parametrize("forecast_fixture", ["forecast_nl.json"])
+@pytest.mark.freeze_time("2023-12-28T14:17:00+00:00")
+async def test_get_forecasts_radar_five_minute_frames(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test the Dutch five-minute frames start at the frame covering now."""
+    await setup_integration(hass, mock_config_entry)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_GET_FORECASTS_RADAR,
+        {ATTR_ENTITY_ID: WEATHER_ENTITY_ID},
+        blocking=True,
+        return_response=True,
+    )
+    assert [
+        forecast["datetime"] for forecast in response[WEATHER_ENTITY_ID]["forecast"]
+    ] == [
+        "2023-12-28T14:15:00+00:00",
+        "2023-12-28T14:20:00+00:00",
+        "2023-12-28T14:25:00+00:00",
+    ]
+
+
+@pytest.mark.usefixtures("mock_irm_kmi_api")
+@pytest.mark.freeze_time("2023-12-28T15:30:00+01:00")
+async def test_get_forecasts_radar_converts_every_rate(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    snapshot: SnapshotAssertion,
+) -> None:
+    """Test the rate and its bounds are all converted to mm/h."""
+    await setup_integration(hass, mock_config_entry)
+
+    response = await hass.services.async_call(
+        DOMAIN,
+        SERVICE_GET_FORECASTS_RADAR,
+        {ATTR_ENTITY_ID: WEATHER_ENTITY_ID, "include_past_forecasts": True},
+        blocking=True,
+        return_response=True,
+    )
+    assert response == snapshot
