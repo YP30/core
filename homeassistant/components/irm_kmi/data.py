@@ -7,6 +7,7 @@ from irm_kmi_api import (
     ExtendedForecast,
     PollenLevel,
     PollenName,
+    RadarForecast,
     WarningData,
 )
 
@@ -21,5 +22,7 @@ class ProcessedCoordinatorData:
     country: str
     pollen: dict[PollenName, PollenLevel | None] | None
     warnings: list[WarningData]
+    # In mm/h
+    radar_forecast: list[RadarForecast]
     hourly_forecast: list[Forecast] = field(default_factory=list)
     daily_forecast: list[ExtendedForecast] = field(default_factory=list)

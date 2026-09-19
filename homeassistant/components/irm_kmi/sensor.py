@@ -20,6 +20,7 @@ from homeassistant.const import (
     UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
+    UnitOfVolumetricFlux,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -29,6 +30,7 @@ from homeassistant.util import dt as dt_util
 from .coordinator import IrmKmiConfigEntry
 from .data import ProcessedCoordinatorData
 from .entity import IrmKmiBaseEntity
+from .utils import current_radar_frame
 
 # Coordinator is used to centralize the data updates
 PARALLEL_UPDATES = 0
@@ -49,6 +51,13 @@ def _pollen_level(
 ) -> Callable[[ProcessedCoordinatorData], PollenLevel | None]:
     """Return a getter for the level of one pollen type."""
     return lambda data: data.pollen[name] if data.pollen is not None else None
+
+
+def _rainfall(data: ProcessedCoordinatorData) -> float | None:
+    """Return the rain rate of the radar frame covering now."""
+    if not (radar_forecast := data.radar_forecast):
+        return None
+    return radar_forecast[current_radar_frame(radar_forecast)]["native_precipitation"]
 
 
 def _next_warning(data: ProcessedCoordinatorData) -> datetime | None:
@@ -125,6 +134,15 @@ SENSOR_TYPES: tuple[IrmKmiSensorEntityDescription, ...] = (
         translation_key="next_warning",
         device_class=SensorDeviceClass.TIMESTAMP,
         value_fn=_next_warning,
+    ),
+    IrmKmiSensorEntityDescription(
+        key="rainfall",
+        device_class=SensorDeviceClass.PRECIPITATION_INTENSITY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfVolumetricFlux.MILLIMETERS_PER_HOUR,
+        # The radar resolves 0.01 mm/10min, which is 0.06 mm/h
+        suggested_display_precision=2,
+        value_fn=_rainfall,
     ),
 )
 
